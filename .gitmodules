@@ -1,0 +1,3 @@
+[submodule "MultiModalGrasping"]
+	path = MultiModalGrasping
+	url = git@github.com:mattcorsaro1/MultiModalGrasping.git
