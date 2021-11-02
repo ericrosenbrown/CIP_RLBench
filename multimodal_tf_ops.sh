@@ -23,7 +23,7 @@ OPERATION="sampling"
 echo $OPERATION
 cd sampling
 $NVCC_VERSION tf_${OPERATION}_g.cu -o tf_${OPERATION}_g.cu.o -c -O2 -DGOOGLE_CUDA=1 -x cu -Xcompiler -fPIC
-g++ -std=c++11 tf_${OPERATION}.cpp tf_${OPERATION}_g.cu.o -o tf_${OPERATION}_so.so -shared -fPIC -I $TF_INC -I $CUDA_PATH/include -I $TF_INC/external/nsync/public -lcudart -L $CUDA_PATH/lib64 -L$TF_LIB -ltensorflow_framework -O2 -D_GLIBCXX_USE_CXX11_ABI=0
+g++-4.8 -std=c++11 tf_${OPERATION}.cpp tf_${OPERATION}_g.cu.o -o tf_${OPERATION}_so.so -shared -fPIC -I $TF_INC -I $CUDA_PATH/include -I $TF_INC/external/nsync/public -lcudart -L $CUDA_PATH/lib64 -L$TF_LIB -ltensorflow_framework -O2 -D_GLIBCXX_USE_CXX11_ABI=0
 cd ..
 
 echo "-----------------------"
@@ -31,14 +31,14 @@ OPERATION="grouping"
 echo $OPERATION
 cd grouping
 $NVCC_VERSION tf_${OPERATION}_g.cu -o tf_${OPERATION}_g.cu.o -c -O2 -DGOOGLE_CUDA=1 -x cu -Xcompiler -fPIC
-g++ -std=c++11 tf_${OPERATION}.cpp tf_${OPERATION}_g.cu.o -o tf_${OPERATION}_so.so -shared -fPIC -I $TF_INC -I $CUDA_PATH/include -I $TF_INC/external/nsync/public -lcudart -L $CUDA_PATH/lib64 -L$TF_LIB -ltensorflow_framework -O2 -D_GLIBCXX_USE_CXX11_ABI=0
+g++-4.8 -std=c++11 tf_${OPERATION}.cpp tf_${OPERATION}_g.cu.o -o tf_${OPERATION}_so.so -shared -fPIC -I $TF_INC -I $CUDA_PATH/include -I $TF_INC/external/nsync/public -lcudart -L $CUDA_PATH/lib64 -L$TF_LIB -ltensorflow_framework -O2 -D_GLIBCXX_USE_CXX11_ABI=0
 cd ..
 
 echo "-----------------------"
 OPERATION="3d_interpolation"
 echo $OPERATION
 cd $OPERATION
-g++ -std=c++11 tf_interpolate.cpp -o tf_interpolate_so.so -shared -fPIC -I $TF_INC -I $CUDA_PATH/include -I $TF_INC/external/nsync/public -lcudart -L $CUDA_PATH/lib64 -L$TF_LIB -ltensorflow_framework -O2 -D_GLIBCXX_USE_CXX11_ABI=0
+g++-4.8 -std=c++11 tf_interpolate.cpp -o tf_interpolate_so.so -shared -fPIC -I $TF_INC -I $CUDA_PATH/include -I $TF_INC/external/nsync/public -lcudart -L $CUDA_PATH/lib64 -L$TF_LIB -ltensorflow_framework -O2 -D_GLIBCXX_USE_CXX11_ABI=0
 cd ..
 
 echo "-----------------------"
