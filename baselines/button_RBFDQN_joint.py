@@ -22,14 +22,20 @@ from pyrep.robots.end_effectors.panda_gripper import PandaGripper
 from pyrep.objects.shape import Shape
 from pyrep.robots.arms.panda import Panda
 from pyrep.objects.joint import Joint
+from pyrep.errors import ConfigurationPathError
+from pyrep.objects.shape import Shape
 
 import numpy as np
- 
 from rlbench.environment import Environment
 from rlbench.action_modes import ArmActionMode, ActionMode
 from rlbench.observation_config import ObservationConfig
 
 from ImageTaskWrapper import ImageTaskWrapper
+
+# stable baseline stuff. 
+
+from stable_baselines3 import DDPG
+from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 
 def rbf_function_on_action(centroid_locations, action, beta):
     '''
@@ -330,6 +336,54 @@ def reward_according_to_subgoal(subgoal, observation, err=1e-2):
     else:
         return -0.01
 
+'''
+motion plans the arm to right above the button
+'''
+def motion_plan_to_above_button(env):
+    task = env.task
+
+    waypoints = task._task.get_waypoints()
+
+    task._robot.arm.set_control_loop_enabled(True)
+
+    done = False
+    
+    point_start = waypoints[0]
+    point_end = waypoints[len(waypoints) - 1]
+    point = waypoints[0]
+
+    target_button = Shape('push_button_target')
+
+    right_above_button = [target_button.get_position()[0], target_button.get_position()[1], 0.9]
+
+    point.get_waypoint_object().set_position(right_above_button)
+
+    point.start_of_path()
+    
+    i = 0; 
+    path = None
+    while path is None:     
+        try:
+            path = point.get_path()
+        except ConfigurationPathError as e:
+            right_above_button[2] -= 0.1
+            point.get_waypoint_object().set_position(right_above_button)
+            pass
+        i += 1
+        if (i > 10):
+            # path not able to be found
+            continue 
+    
+    i = 0
+    while not done:
+        print("moving to right above button: " + str(i))
+        done = path.step()
+        task._task.pyrep.step() 
+        i += 1
+
+    point.end_of_path()
+    task._robot.arm.set_control_loop_enabled(False)
+
 if __name__ == '__main__':
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -344,9 +398,9 @@ if __name__ == '__main__':
 
 
 
-    env = gym.make(params['env_name'])  # render_mode="human"
+    env = gym.make(params['env_name'], render_mode="human")  # render_mode="human"
     #wrap the environment with the custom wrapper to reduce obs space
-    
+
     # if using the low dimensional shape and you want to prune the state space down. 
     env = ImageTaskWrapper(env)
         
@@ -387,6 +441,16 @@ if __name__ == '__main__':
                           device=device)
     Q_object_target.eval()
 
+    ## DDPG CNN Stable Baselines code which needs to be fixed
+    # The noise objects for DDPG
+    # n_actions = env.action_space.shape[-1]
+    # action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
+    # breakpoint()
+    # model = DDPG("CnnPolicy", env, action_noise=action_noise, verbose=1)
+    # model.learn(total_timesteps=10000, log_interval=10)
+    # model.save("ddpg_pendulum")
+    # env = model.get_env()
+
     utils_for_q_learning.sync_networks(target=Q_object_target,
                                        online=Q_object,
                                        alpha=params['target_network_learning_rate'],
@@ -416,6 +480,9 @@ if __name__ == '__main__':
         trajectory = [] # store the transitions from each trajectory here. Is cleared after each trajectory.
         #pdb.set_trace()
         s, done, t = env.reset(), False, 0
+
+        motion_plan_to_above_button(env)
+
         #print("Initial State is: ", s)
 
         #print("target_button_wrap's position", target_button_wrap.get_position())
