@@ -31,6 +31,8 @@ from rlbench.action_modes import ArmActionMode, ActionMode
 from rlbench.observation_config import ObservationConfig
 
 from ImageTaskWrapper import ImageTaskWrapper
+from BaselineWrapper import BaselineTaskWrapper
+from HapticWrapper import HapticWrapper
 
 # stable baseline stuff. 
 
@@ -397,13 +399,19 @@ if __name__ == '__main__':
     params['hyper_parameters_name'] = hyper_parameter_name
 
 
+    # obs_config = ObservationConfig()
+    # obs_config.set_all_high_dim(False)
+    # obs_config.set_all_low_dim(True)
+    # action_mode = ActionMode(ArmActionMode.ABS_JOINT_POSITION)
+    # env = Environment(action_mode, obs_config=obs_config, headless=False)
 
-    env = gym.make(params['env_name'], render_mode="human")  # render_mode="human"
+    env = gym.make(params['env_name'])  # render_mode="human"
     #wrap the environment with the custom wrapper to reduce obs space
 
     # if using the low dimensional shape and you want to prune the state space down. 
-    env = ImageTaskWrapper(env)
-        
+    #env = ImageTaskWrapper(env)
+
+    env = BaselineTaskWrapper(env)   
     #env = gym.make(params['env_name'], render_mode="human")  #check env sion
     #replacing Gym with RLBench's default Environment
     #live_demos = True
@@ -427,7 +435,6 @@ if __name__ == '__main__':
 
     s0 = env.reset()
 
-
     utils_for_q_learning.action_checker(env)
     Q_object = Net(params,
                    env,
@@ -445,8 +452,7 @@ if __name__ == '__main__':
     # The noise objects for DDPG
     # n_actions = env.action_space.shape[-1]
     # action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
-    # breakpoint()
-    # model = DDPG("CnnPolicy", env, action_noise=action_noise, verbose=1)
+    # model = DDPG("CnnPolicy", env, action_noise=action_noise, verbose=1, buffer_size=50000)
     # model.learn(total_timesteps=10000, log_interval=10)
     # model.save("ddpg_pendulum")
     # env = model.get_env()
@@ -503,6 +509,10 @@ if __name__ == '__main__':
 
             sp, r, done, _ = env.step(numpy.array(a))
             #print("Training loop diff is: ", sp-s)
+
+            haptic_data = sp.gripper_touch_forces
+
+            breakpoint()
 
 
             if done:

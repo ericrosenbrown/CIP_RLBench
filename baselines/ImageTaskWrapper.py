@@ -9,14 +9,11 @@ import cv2
 #this wrapper is created to shrink the observation space of the original target reach from RLbench
 class ImageTaskWrapper(gym.Wrapper):
 
-
     def __init__(self, env):
         super(ImageTaskWrapper, self).__init__(env)
         #over ride the original observation space
         self.history_length = 3
         self.state_buffer = deque([], maxlen=self.history_length)
-
-
 
     def reset(self):
         obs = self.env.reset()
