@@ -36,8 +36,8 @@ from HapticWrapper import HapticWrapper
 
 # stable baseline stuff. 
 
-from stable_baselines3 import DDPG
-from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
+#from stable_baselines3 import DDPG
+#from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 
 def rbf_function_on_action(centroid_locations, action, beta):
     '''

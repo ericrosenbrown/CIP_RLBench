@@ -15,7 +15,6 @@ class BaselineTaskWrapper(gym.Wrapper):
         self.env.spec.max_episode_steps = max_episode_steps
         self._max_episode_steps = self.max_episode_steps
         self._elapsed_steps = None
-        breakpoint()
         obs = self.env.reset()['front_rgb']
         self.observation_space = spaces.Box(0, 255, [*obs.shape], dtype='uint8')
 
@@ -29,6 +28,6 @@ class BaselineTaskWrapper(gym.Wrapper):
         self._elapsed_steps += 1
         if self._elapsed_steps >= self._max_episode_steps:
             done = True
-        breakpoint()
+
         obs = self.env.reset()['front_rgb']
         return obs, reward, done, info
