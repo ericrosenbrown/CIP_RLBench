@@ -39,13 +39,15 @@ class RLBenchCustEnv(gym.Env):
         _, obs = self.task.reset()
         self.action_space = spaces.Box(
             low=-1.0, high=1.0, shape=(self.env.action_size,))
-
         if observation_mode == 'state':
             self.observation_space = spaces.Box(
                 low=-np.inf, high=np.inf, shape=obs.get_low_dim_data().shape)
         elif observation_mode == 'touch_forces':
+            self.observation_space = spaces.Box(-np.inf, np.inf, shape=(17,), dtype='float32')
+            '''
             self.observation_space = spaces.Box(
-                low=-np.inf, high=np.inf, shape=obs.gripper_touch_forces.shape)            
+                low=-np.inf, high=np.inf, shape = obs.gripper_pose[:3].shape) #shape=np.array((*obs.gripper_touch_forces, *obs.gripper_pose[:3])).shape)       
+            '''     
         elif observation_mode == 'vision':
             self.observation_space = spaces.Dict({
                 "state": spaces.Box(
@@ -75,7 +77,8 @@ class RLBenchCustEnv(gym.Env):
         if self._observation_mode == 'state':
             return obs.get_low_dim_data()
         elif self._observation_mode == 'touch_forces':
-            return obs.gripper_touch_forces
+            obs = obs.get_low_dim_data()
+            return [*obs[8:15], *obs[22:29], *obs[66:69]]  #np.array((*obs.gripper_touch_forces, *obs.gripper_pose[:3]))
         elif self._observation_mode == 'vision':
             return {
                 "state": obs.get_low_dim_data(),

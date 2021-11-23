@@ -15,18 +15,17 @@ import pickle
 
 def rbf_function_on_action(centroid_locations, action, beta):
     '''
-    centroid_locations: Tensor [batch x num_centroids (N) x a_dim (action_size)]
-    action_set: Tensor [batch x a_dim (action_size)]
-    beta: float
-        - Parameter for RBF function
-
-    Description: Computes the RBF function given centroid_locations and one action
-    '''
+	centroid_locations: Tensor [batch x num_centroids (N) x a_dim (action_size)]
+	action_set: Tensor [batch x a_dim (action_size)]
+	beta: float
+		- Parameter for RBF function
+	Description: Computes the RBF function given centroid_locations and one action
+	'''
     assert len(centroid_locations.shape) == 3, "Must pass tensor with shape: [batch x N x a_dim]"
     assert len(action.shape) == 2, "Must pass tensor with shape: [batch x a_dim]"
 
     diff_norm = centroid_locations - action.unsqueeze(dim=1).expand_as(centroid_locations)
-    diff_norm = diff_norm**2
+    diff_norm = diff_norm ** 2
     diff_norm = torch.sum(diff_norm, dim=2)
     diff_norm = torch.sqrt(diff_norm + 1e-7)
     diff_norm = diff_norm * beta * -1
@@ -36,14 +35,13 @@ def rbf_function_on_action(centroid_locations, action, beta):
 
 def rbf_function(centroid_locations, action_set, beta):
     '''
-    centroid_locations: Tensor [batch x num_centroids (N) x a_dim (action_size)]
-    action_set: Tensor [batch x num_act x a_dim (action_size)]
-        - Note: pass in num_act = 1 if you want a single action evaluated
-    beta: float
-        - Parameter for RBF function
-
-    Description: Computes the RBF function given centroid_locations and some actions
-    '''
+	centroid_locations: Tensor [batch x num_centroids (N) x a_dim (action_size)]
+	action_set: Tensor [batch x num_act x a_dim (action_size)]
+		- Note: pass in num_act = 1 if you want a single action evaluated
+	beta: float
+		- Parameter for RBF function
+	Description: Computes the RBF function given centroid_locations and some actions
+	'''
     assert len(centroid_locations.shape) == 3, "Must pass tensor with shape: [batch x N x a_dim]"
     assert len(action_set.shape) == 3, "Must pass tensor with shape: [batch x num_act x a_dim]"
 
@@ -244,9 +242,11 @@ class Net(nn.Module):
         return a
 
     def update(self, target_Q, count):
+        
         if len(self.buffer_object) < self.params['batch_size']:
             return 0
-        s_matrix, a_matrix, r_matrix, done_matrix, sp_matrix = self.buffer_object.sample(self.params['batch_size'])
+
+        s_matrix, a_matrix, r_matrix,  sp_matrix, done_matrix = self.buffer_object.sample(self.params['batch_size'])
         r_matrix = numpy.clip(r_matrix,
                               a_min=-self.params['reward_clip'],
                               a_max=self.params['reward_clip'])
@@ -258,10 +258,10 @@ class Net(nn.Module):
         sp_matrix = torch.from_numpy(sp_matrix).float().to(self.device)
 
         Q_star, _ = target_Q.get_best_qvalue_and_action(sp_matrix)
-        Q_star = Q_star.reshape((self.params['batch_size'], -1))
+        Q_star = Q_star.reshape((self.params['batch_size'], -1)).squeeze()  #simon: squeeze q_star
         with torch.no_grad():
             y = r_matrix + self.params['gamma'] * (1 - done_matrix) * Q_star
-        y_hat = self.forward(s_matrix, a_matrix)
+        y_hat = self.forward(s_matrix, a_matrix).squeeze() #simion: squeeze y_hat as well.
         loss = self.criterion(y_hat, y)
         self.zero_grad()
         loss.backward()

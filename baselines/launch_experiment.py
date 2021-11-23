@@ -42,7 +42,7 @@ if __name__ == '__main__':
     params = utils_for_q_learning.get_hyper_parameters(hyper_parameter_name, alg)
     params['hyper_parameters_name'] = hyper_parameter_name
 
-    env = RLBenchCustEnv(PushButton, observation_mode='touch_forces', render_mode='human')
+    env = RLBenchCustEnv(PushButton, observation_mode='touch_forces') #, render_mode='human'
 
     params['env'] = env
     params['seed_number'] = int(sys.argv[2])
@@ -97,16 +97,16 @@ if __name__ == '__main__':
         success = False
         while not done:
             a = Q_object.execute_policy(s, episode + 1, 'train')
-
+          
             sp, r, done, _ = env.step(numpy.array(a))
 
+            #print(sp)
             if done:
                 print('reach target!', 'reward: ', r, 'done in', t, 'steps')
                 success = True
 
             t = t + 1
             done_p = False if t == max_episode_steps else done
-
             # end the current episode
             if t == max_episode_steps:
                 done = True
@@ -126,21 +126,15 @@ if __name__ == '__main__':
         loss_li.append(numpy.mean(loss))
 
         # tracking the agent's performance
-        if (episode % 10 == 0) or (episode == params['max_episode'] - 1):
+        if (episode % 10 == 0 and episode>5) or (episode == params['max_episode'] - 1):
             temp = []
             for _ in range(10):
                 s, G, done, t = env.reset(), 0, False, 0
 
-                # new s is [arm.get_joint_positions(), tip.get_pose(), target.get_position()]
-
                 while done == False:
                     a = Q_object.e_greedy_policy(s, episode + 1, 'test')
                     sp, r, done, _ = env.step(numpy.array(a))
-
-                    # new s is [arm.get_joint_positions(), tip.get_pose(), target.get_position()]
-
                     s, G, t = sp, G + r, t + 1
-
                     #if can't find within 200 steps, end it.
                     if t == max_episode_steps_eval:
                     	done = True
@@ -151,6 +145,6 @@ if __name__ == '__main__':
 
             G_li.append(numpy.mean(temp))
             utils_for_q_learning.save(G_li, loss_li, params, alg)
-            if numpy.mean(temp) >=0.8 or episode % 50 == 0:
+            if numpy.mean(temp) >=0.2 and episode % 50 == 0:
                 torch.save(Q_object.state_dict(), './logs/obj_net_button_push' + str(episode) + "_seed_" + str(params['seed_number']))
                 torch.save(Q_object_target.state_dict(), './logs/obj_target_net_button_push' +str(episode)+ "_seed_" + str(params['seed_number']))

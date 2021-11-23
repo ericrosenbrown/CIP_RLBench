@@ -80,7 +80,7 @@ def motion_plan_to_above_button(env):
             continue 
     i = 0
     while not done:
-        print("moving to right above button: " + str(i))
+        #print("moving to right above button: " + str(i))
         done = path.step()
         task._task.pyrep.step() 
         i += 1
