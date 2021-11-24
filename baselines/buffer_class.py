@@ -1,62 +1,72 @@
-import numpy as np
+import numpy
+from cpprb import ReplayBuffer, PrioritizedReplayBuffer, create_env_dict, create_before_add_func
 import random
 
-class ReplayBuffer(object):
-    def __init__(self, size):
-        """Create Replay buffer.
-        Parameters
-        ----------
-        size: int
-            Max number of transitions to store in the buffer. When the buffer
-            overflows the old memories are dropped.
-        """
-        self._storage = []
-        self._maxsize = size
-        self._next_idx = 0
 
-    def __len__(self):
-        return len(self._storage)
+class buffer_class:
+	def __init__(self, max_length, seed_number, env, n_step=False, n_step_size=4):
+		env_dict = create_env_dict(env)
+		self.before_add = create_before_add_func(env)
+		self.n_step=n_step
+		self.n_step_size = n_step_size
+		if self.n_step:
+			self.storage = ReplayBuffer(max_length, env_dict, Nstep={
+				"size": self.n_step_size,
+				"gamma": 0.99,
+				"rew": "rew",
+				"next": "next_obs"
+			})
+		else:
+			self.storage = ReplayBuffer(max_length, env_dict)
+		
 
-    def add(self, obs_t, action, reward, obs_tp1, done):
-        data = (obs_t, action, reward, obs_tp1, done)
+	def append(self, s, a, r, done, sp):
+		if self.n_step:
+			s = s.reshape(1, s.shape[0])
+			a = a.reshape(1, a.shape[0])
+			sp = sp.reshape(1, sp.shape[0])
+			if not done:
+				self.storage.add(**self.before_add(obs=s,
+					act=a,
+					rew=r,
+					next_obs=sp,
+					done=0.0))
+			else:
+				self.storage.on_episode_end()
+		else:
+			self.storage.add(**self.before_add(obs=s, act=a, rew=r, done=done, next_obs=sp))
 
-        if self._next_idx >= len(self._storage):
-            self._storage.append(data)
-        else:
-            self._storage[self._next_idx] = data
-        self._next_idx = (self._next_idx + 1) % self._maxsize
+	def sample(self, batch_size):
+		batch = self.storage.sample(batch_size)
+		s_matrix = batch['obs']
+		a_matrix = batch['act']
+		r_matrix = batch['rew']
+		done_matrix = batch['done']
+		sp_matrix = batch['next_obs']
+		return s_matrix, a_matrix, r_matrix, done_matrix, sp_matrix
 
-    def _encode_sample(self, idxes):
-        obses_t, actions, rewards, obses_tp1, dones = [], [], [], [], []
-        for i in idxes:
-            data = self._storage[i]
-            obs_t, action, reward, obs_tp1, done = data
-            obses_t.append(np.array(obs_t, copy=False))
-            actions.append(np.array(action, copy=False))
-            rewards.append(reward)
-            obses_tp1.append(np.array(obs_tp1, copy=False))
-            dones.append(done)
-        return np.array(obses_t), np.array(actions), np.array(rewards), np.array(obses_tp1), np.array(dones)
+	def __len__(self):
+		return self.storage.get_stored_size()
 
-    def sample(self, batch_size):
-        """Sample a batch of experiences.
-        Parameters
-        ----------
-        batch_size: int
-            How many transitions to sample.
-        Returns
-        -------
-        obs_batch: np.array
-            batch of observations
-        act_batch: np.array
-            batch of actions executed given obs_batch
-        rew_batch: np.array
-            rewards received as results of executing act_batch
-        next_obs_batch: np.array
-            next set of observations seen after executing act_batch
-        done_mask: np.array
-            done_mask[i] = 1 if executing act_batch[i] resulted in
-            the end of an episode and 0 otherwise.
-        """
-        idxes = [random.randint(0, len(self._storage) - 1) for _ in range(batch_size)]
-        return self._encode_sample(idxes)
+class PriorityBuffer:
+	def __init__(self, max_length, seed_number, env):
+		env_dict = create_env_dict(env)
+		self.before_add = create_before_add_func(env)
+		self.storage = PrioritizedReplayBuffer(max_length, env_dict)
+
+	def append(self, s, a, r, done, sp):
+		self.storage.add(**self.before_add(obs=s, act=a, rew=r, done=done, next_obs=sp))
+
+	def sample(self, batch_size):
+		batch = self.storage.sample(batch_size)
+		s_matrix = batch['obs']
+		a_matrix = batch['act']
+		r_matrix = batch['rew']
+		done_matrix = batch['done']
+		sp_matrix = batch['next_obs']
+		weights = batch['weights']
+		indexes = batch['indexes']
+		return s_matrix, a_matrix, r_matrix, done_matrix, sp_matrix, weights, indexes
+
+	def __len__(self):
+		return self.storage.get_stored_size()

@@ -1,5 +1,10 @@
 import gym
 import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+import pdb
+import rlbench.gym
+import sys
 import time
 import numpy
 import random
@@ -12,6 +17,20 @@ import torch.optim as optim
 import numpy
 import pickle
 
+#pyrep stuff
+from pyrep.robots.end_effectors.panda_gripper import PandaGripper
+from pyrep.objects.shape import Shape
+from pyrep.robots.arms.panda import Panda
+from pyrep.objects.joint import Joint
+
+import numpy as np
+
+from rlbench.environment import Environment
+from rlbench.action_modes import ArmActionMode, ActionMode
+from rlbench.observation_config import ObservationConfig
+
+from push_button_wrapper import Push_button_wrapper
+
 
 def rbf_function_on_action(centroid_locations, action, beta):
     '''
@@ -19,6 +38,7 @@ def rbf_function_on_action(centroid_locations, action, beta):
 	action_set: Tensor [batch x a_dim (action_size)]
 	beta: float
 		- Parameter for RBF function
+
 	Description: Computes the RBF function given centroid_locations and one action
 	'''
     assert len(centroid_locations.shape) == 3, "Must pass tensor with shape: [batch x N x a_dim]"
@@ -40,6 +60,7 @@ def rbf_function(centroid_locations, action_set, beta):
 		- Note: pass in num_act = 1 if you want a single action evaluated
 	beta: float
 		- Parameter for RBF function
+
 	Description: Computes the RBF function given centroid_locations and some actions
 	'''
     assert len(centroid_locations.shape) == 3, "Must pass tensor with shape: [batch x N x a_dim]"
@@ -61,8 +82,11 @@ class Net(nn.Module):
         self.N = self.params['num_points']
         self.max_a = self.env.action_space.high[0]
         self.beta = self.params['temperature']
-        self.buffer_object = buffer_class.ReplayBuffer(size=self.params['max_buffer_size'])
 
+        self.buffer_object = buffer_class.buffer_class(
+            max_length=self.params['max_buffer_size'],
+            env=self.env,
+            seed_number=self.params['seed_number'])
 
         self.state_size, self.action_size = state_size, action_size
 
@@ -112,10 +136,10 @@ class Net(nn.Module):
         self.params_dic = [{
             'params': self.value_module.parameters(), 'lr': self.params['learning_rate']
         },
-                           {
-                               'params': self.location_module.parameters(),
-                               'lr': self.params['learning_rate_location_side']
-                           }]
+            {
+                'params': self.location_module.parameters(),
+                'lr': self.params['learning_rate_location_side']
+            }]
         try:
             if self.params['optimizer'] == 'RMSprop':
                 self.optimizer = optim.RMSprop(self.params_dic)
@@ -130,22 +154,22 @@ class Net(nn.Module):
 
     def get_centroid_values(self, s):
         '''
-        given a batch of s, get all centroid values, [batch x N]
-        '''
+		given a batch of s, get all centroid values, [batch x N]
+		'''
         centroid_values = self.value_module(s)
         return centroid_values
 
     def get_centroid_locations(self, s):
         '''
-        given a batch of s, get all centroid_locations, [batch x N x a_dim]
-        '''
+		given a batch of s, get all centroid_locations, [batch x N x a_dim]
+		'''
         centroid_locations = self.max_a * self.location_module(s)
         return centroid_locations
 
     def get_best_qvalue_and_action(self, s):
         '''
-        given a batch of states s, return Q(s,a), max_{a} ([batch x 1], [batch x a_dim])
-        '''
+		given a batch of states s, return Q(s,a), max_{a} ([batch x 1], [batch x a_dim])
+		'''
         all_centroids = self.get_centroid_locations(s)
         values = self.get_centroid_values(s)
         weights = rbf_function(all_centroids, all_centroids, self.beta)  # [batch x N x N]
@@ -163,8 +187,8 @@ class Net(nn.Module):
 
     def forward(self, s, a):
         '''
-        given a batch of s,a , compute Q(s,a) [batch x 1]
-        '''
+		given a batch of s,a , compute Q(s,a) [batch x 1]
+		'''
         centroid_values = self.get_centroid_values(s)  # [batch_dim x N]
         centroid_locations = self.get_centroid_locations(s)
         # [batch x N]
@@ -175,9 +199,9 @@ class Net(nn.Module):
 
     def e_greedy_policy(self, s, episode, train_or_test):
         '''
-        Given state s, at episode, take random action with p=eps if training 
-        Note - epsilon is determined by episode
-        '''
+		Given state s, at episode, take random action with p=eps if training
+		Note - epsilon is determined by episode
+		'''
         epsilon = 1.0 / numpy.power(episode, 1.0 / self.params['policy_parameter'])
         if train_or_test == 'train' and random.random() < epsilon:
             a = self.env.action_space.sample()
@@ -194,9 +218,9 @@ class Net(nn.Module):
 
     def e_greedy_gaussian_policy(self, s, episode, train_or_test):
         '''
-        Given state s, at episode, take random action with p=eps if training 
-        Note - epsilon is determined by episode
-        '''
+		Given state s, at episode, take random action with p=eps if training
+		Note - epsilon is determined by episode
+		'''
         epsilon = 1.0 / numpy.power(episode, 1.0 / self.params['policy_parameter'])
         if train_or_test == 'train' and random.random() < epsilon:
             a = self.env.action_space.sample()
@@ -215,21 +239,11 @@ class Net(nn.Module):
             a = a + noise
             return a
 
-    def execute_policy(self, s, episode, train_or_test):
-        a = None
-        if self.params['policy_type'] == 'e_greedy':
-            a = self.e_greedy_policy(s, episode, train_or_test)
-        elif self.params['policy_type'] == 'e_greedy_gaussian':
-            a = self.e_greedy_gaussian_policy(s, episode, train_or_test)
-        elif self.params['policy_type'] == 'gaussian':
-            a = self.gaussian_policy(s, episode, train_or_test)
-        return a
-
     def gaussian_policy(self, s, episode, train_or_test):
         '''
-        Given state s, at episode, take random action with p=eps if training 
-        Note - epsilon is determined by episode
-        '''
+		Given state s, at episode, take random action with p=eps if training
+		Note - epsilon is determined by episode
+		'''
         self.eval()
         s_matrix = numpy.array(s).reshape(1, self.state_size)
         with torch.no_grad():
@@ -242,11 +256,9 @@ class Net(nn.Module):
         return a
 
     def update(self, target_Q, count):
-        
         if len(self.buffer_object) < self.params['batch_size']:
             return 0
-
-        s_matrix, a_matrix, r_matrix,  sp_matrix, done_matrix = self.buffer_object.sample(self.params['batch_size'])
+        s_matrix, a_matrix, r_matrix, done_matrix, sp_matrix = self.buffer_object.sample(self.params['batch_size'])
         r_matrix = numpy.clip(r_matrix,
                               a_min=-self.params['reward_clip'],
                               a_max=self.params['reward_clip'])
@@ -258,10 +270,10 @@ class Net(nn.Module):
         sp_matrix = torch.from_numpy(sp_matrix).float().to(self.device)
 
         Q_star, _ = target_Q.get_best_qvalue_and_action(sp_matrix)
-        Q_star = Q_star.reshape((self.params['batch_size'], -1)).squeeze()  #simon: squeeze q_star
+        Q_star = Q_star.reshape((self.params['batch_size'], -1))
         with torch.no_grad():
             y = r_matrix + self.params['gamma'] * (1 - done_matrix) * Q_star
-        y_hat = self.forward(s_matrix, a_matrix).squeeze() #simion: squeeze y_hat as well.
+        y_hat = self.forward(s_matrix, a_matrix)
         loss = self.criterion(y_hat, y)
         self.zero_grad()
         loss.backward()
@@ -274,81 +286,3 @@ class Net(nn.Module):
             copy=False)
         return loss.cpu().data.numpy()
 
-
-if __name__ == '__main__':
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-        print("Running on the GPU")
-    else:
-        device = torch.device("cpu")
-        print("Running on the CPU")
-    hyper_parameter_name = sys.argv[1]
-    alg = 'rbf'
-    params = utils_for_q_learning.get_hyper_parameters(hyper_parameter_name, alg)
-    params['hyper_parameters_name'] = hyper_parameter_name
-    env = gym.make(params['env_name'])
-    #env = gym.wrappers.Monitor(env, 'videos/'+params['env_name']+"/", video_callable=lambda episode_id: episode_id%10==0,force = True)
-    params['env'] = env
-    params['seed_number'] = int(sys.argv[2])
-    utils_for_q_learning.set_random_seed(params)
-    s0 = env.reset()
-    utils_for_q_learning.action_checker(env)
-    Q_object = Net(params,
-                   env,
-                   state_size=len(s0),
-                   action_size=len(env.action_space.low),
-                   device=device)
-    Q_object_target = Net(params,
-                          env,
-                          state_size=len(s0),
-                          action_size=len(env.action_space.low),
-                          device=device)
-    Q_object_target.eval()
-
-    utils_for_q_learning.sync_networks(target=Q_object_target,
-                                       online=Q_object,
-                                       alpha=params['target_network_learning_rate'],
-                                       copy=True)
-
-    G_li = []
-    loss_li = []
-    all_times_per_steps = []
-    all_times_per_updates = []
-    for episode in range(params['max_episode']):
-        print("episode {}".format(episode))
-
-        s, done, t = env.reset(), False, 0
-        while not done:
-            if params['policy_type'] == 'e_greedy':
-                a = Q_object.e_greedy_policy(s, episode + 1, 'train')
-            elif params['policy_type'] == 'e_greedy_gaussian':
-                a = Q_object.e_greedy_gaussian_policy(s, episode + 1, 'train')
-            elif params['policy_type'] == 'gaussian':
-                a = Q_object.gaussian_policy(s, episode + 1, 'train')
-            sp, r, done, _ = env.step(numpy.array(a))
-            t = t + 1
-            done_p = False if t == env._max_episode_steps else done
-            Q_object.buffer_object.append(s, a, r, done_p, sp)
-            s = sp
-        #now update the Q network
-        loss = []
-        for count in range(params['updates_per_episode']):
-            temp = Q_object.update(Q_object_target, count)
-            loss.append(temp)
-
-        loss_li.append(numpy.mean(loss))
-
-        if (episode % 10 == 0) or (episode == params['max_episode'] - 1):
-            temp = []
-            for _ in range(10):
-                s, G, done, t = env.reset(), 0, False, 0
-                while done == False:
-                    a = Q_object.e_greedy_policy(s, episode + 1, 'test')
-                    sp, r, done, _ = env.step(numpy.array(a))
-                    s, G, t = sp, G + r, t + 1
-                temp.append(G)
-            print(
-                "after {} episodes, learned policy collects {} average returns".format(
-                    episode, numpy.mean(temp)))
-            G_li.append(numpy.mean(temp))
-            utils_for_q_learning.save(G_li, loss_li, params, alg)
