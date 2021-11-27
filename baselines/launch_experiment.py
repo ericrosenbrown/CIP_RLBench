@@ -44,21 +44,10 @@ if __name__ == '__main__':
 
 
 
-    env = gym.make(params['env_name'])  # render_mode="human"
+    #env = gym.make(params['env_name'])  # render_mode="human"
     #wrap the environment with the custom wrapper to reduce obs space
-    env = Push_button_wrapper(env)
-    #env = gym.make(params['env_name'], render_mode="human")  #check env sion
-    #replacing Gym with RLBench's default Environment
-    #live_demos = True
-    #DATASET = ''
-
-    #action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
-    #env = Environment(action_mode, DATASET, obs_config, False)
-    #env.launch()
-    #task = env.task
-    #demos = task.get_demos(2, live_demos=live_demos)
-    #pdb.set_trace()
-    #print('demos: ', demos)
+    #env = Push_button_wrapper(env)
+    env = RLBenchCustEnv(PushButton,observation_mode='touch_forces', render_mode='human')
 
 
     params['env'] = env
@@ -113,13 +102,10 @@ if __name__ == '__main__':
         trajectory = [] # store the transitions from each trajectory here. Is cleared after each trajectory.
         #pdb.set_trace()
         s, done, t = env.reset(), False, 0
-
+ 
         #print("Initial State is: ", s)
+        motion_plan_to_above_button(env)
 
-        #print("target_button_wrap's position", target_button_wrap.get_position())
-        #print("target_button's position", target_button.get_position())
-        #print("target_button_topPlate", target_topPlate.get_position())
-        #pdb.set_trace()
 
         #indicate whether the arm tip has reached the target
         success = False
@@ -167,7 +153,7 @@ if __name__ == '__main__':
             temp = []
             for _ in range(10):
                 s, G, done, t = env.reset(), 0, False, 0
-                # new s is [arm.get_joint_positions(), tip.get_pose(), target.get_position()]
+                motion_plan_to_above_button(env)
 
                 while done == False:
                     a = Q_object.e_greedy_policy(s, episode + 1, 'test')
@@ -187,6 +173,6 @@ if __name__ == '__main__':
 
             G_li.append(numpy.mean(temp))
             utils_for_q_learning.save(G_li, loss_li, params, alg)
-            if numpy.mean(temp) >=0.8 or episode % 50 == 0:
+            if numpy.mean(temp) >=0.5 and episode % 50 == 0:
                 torch.save(Q_object.state_dict(), './logs/obj_net_button_push' + str(episode) + "_seed_" + str(params['seed_number']))
                 torch.save(Q_object_target.state_dict(), './logs/obj_target_net_button_push' +str(episode)+ "_seed_" + str(params['seed_number']))

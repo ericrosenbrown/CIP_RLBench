@@ -9,8 +9,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import utils_for_q_learning, buffer_class
-from ImageTaskWrapper import ImageTaskWrapper
-from button_RBFDQN_joint import Net
+from RBFDQN import Net
+from rlbench_custom_env import RLBenchCustEnv
+from utils import motion_plan_to_above_button
+from rlbench.tasks import PushButton
 if torch.cuda.is_available():
     device = torch.device("cuda")
     print("Running on the GPU")
@@ -23,10 +25,9 @@ alg = 'rbf'
 params = utils_for_q_learning.get_hyper_parameters(hyper_parameter_name, alg)
 params['hyper_parameters_name'] = hyper_parameter_name
 
-env = gym.make(params['env_name'], render_mode="human")
+env = RLBenchCustEnv(PushButton,observation_mode='touch_forces',render_mode='human')
 
 #wrap around to decrease observation space
-env = ImageTaskWrapper(env)
 params['env'] = env
 params['seed_number'] = int(sys.argv[2])
 s0 = env.reset()
@@ -37,7 +38,7 @@ Q_object = Net(params,
                    state_size=len(s0),
                    action_size=len(env.action_space.low),
                    device=device)
-Q_object.load_state_dict(torch.load('/home/sreehari/Downloads/CIP_Results/vision_button_push_no_arm_init/logs/obj_net_button_push450_seed_0'))
+Q_object.load_state_dict(torch.load('./logs/obj_target_net_button_push2650_seed_0'))
 Q_object.eval()
 
 
@@ -47,7 +48,7 @@ num_success = 0
 for j in range(num_episodes):
     print("episode:", j)
     obs = env.reset()
-
+    motion_plan_to_above_button(env)
     for i in range(200):
         action = Q_object.e_greedy_policy(obs, j + 1, 'test')
 

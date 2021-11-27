@@ -9,7 +9,7 @@ from rlbench.environment import Environment
 from rlbench.action_modes import ArmActionMode, ActionMode
 from rlbench.observation_config import ObservationConfig
 import numpy as np
-
+from pyrep.objects.shape import Shape
 
 class RLBenchCustEnv(gym.Env):
     """An gym wrapper for RLBench."""
@@ -29,7 +29,10 @@ class RLBenchCustEnv(gym.Env):
         else:
             raise ValueError(
                 'Unrecognised observation_mode: %s.' % observation_mode)
-        action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
+        
+        action_mode = ActionMode(ArmActionMode.ABS_EE_POSE_PLAN_WORLD_FRAME_WITH_COLLISION_CHECK)
+        
+        #action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
         #action_mode = ActionMode(ArmActionMode.DELTA_EE_POSE_PLAN_WORLD_FRAME)
         self.env = Environment(
             action_mode, obs_config=obs_config, headless=True)
@@ -43,11 +46,12 @@ class RLBenchCustEnv(gym.Env):
             self.observation_space = spaces.Box(
                 low=-np.inf, high=np.inf, shape=obs.get_low_dim_data().shape)
         elif observation_mode == 'touch_forces':
-            self.observation_space = spaces.Box(-np.inf, np.inf, shape=(17,), dtype='float32')
-            '''
+            #self.observation_space = spaces.Box(-np.inf, np.inf, shape=(17,), dtype='float32')
+            target_topPlate = Shape('target_button_topPlate')
+
             self.observation_space = spaces.Box(
-                low=-np.inf, high=np.inf, shape = obs.gripper_pose[:3].shape) #shape=np.array((*obs.gripper_touch_forces, *obs.gripper_pose[:3])).shape)       
-            '''     
+                low=-np.inf, high=np.inf, shape =np.array((*obs.gripper_touch_forces, *obs.gripper_pose[:3], *target_topPlate.get_position())).shape) #shape=)        obs.gripper_pose[:3].shape
+    
         elif observation_mode == 'vision':
             self.observation_space = spaces.Dict({
                 "state": spaces.Box(
@@ -72,13 +76,17 @@ class RLBenchCustEnv(gym.Env):
                 self._gym_cam.set_render_mode(RenderMode.OPENGL3_WINDOWED)
             else:
                 self._gym_cam.set_render_mode(RenderMode.OPENGL3)
+        self.action_high = np.array((self.task._scene._workspace_maxx-0.01, self.task._scene._workspace_maxy-0.01, self.task._scene._workspace_maxz-0.01 ))
+        self.action_low = np.array((self.task._scene._workspace_minx+0.01, self.task._scene._workspace_miny+0.01, self.task._scene._workspace_minz+0.01 ))
 
     def _extract_obs(self, obs) -> Dict[str, np.ndarray]:
         if self._observation_mode == 'state':
             return obs.get_low_dim_data()
         elif self._observation_mode == 'touch_forces':
-            obs = obs.get_low_dim_data()
-            return [*obs[8:15], *obs[22:29], *obs[66:69]]  #np.array((*obs.gripper_touch_forces, *obs.gripper_pose[:3]))
+            #obs = obs.get_low_dim_data()
+            #return [*obs[8:15], *obs[22:29], *obs[66:69]]  #
+            target_topPlate = Shape('target_button_topPlate')
+            return np.array((*obs.gripper_touch_forces, *obs.gripper_pose[:3], *target_topPlate.get_position()))
         elif self._observation_mode == 'vision':
             return {
                 "state": obs.get_low_dim_data(),
@@ -106,7 +114,8 @@ class RLBenchCustEnv(gym.Env):
         return self._extract_obs(obs)
 
     def step(self, action) -> Tuple[Dict[str, np.ndarray], float, bool, dict]:
-        obs, reward, terminate = self.task.step(action)
+        clipped_action = np.array((*np.clip(action[0:3], self.action_low, self.action_high), 1,0,0,0,0))
+        obs, reward, terminate = self.task.step(clipped_action)
         return self._extract_obs(obs), reward, terminate, {}
 
     def close(self) -> None:
