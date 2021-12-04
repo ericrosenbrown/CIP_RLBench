@@ -10,6 +10,7 @@ from rlbench.action_modes import ArmActionMode, ActionMode
 from rlbench.observation_config import ObservationConfig
 import numpy as np
 from pyrep.objects.shape import Shape
+from pyrep.errors import ConfigurationPathError
 
 class RLBenchCustEnv(gym.Env):
     """An gym wrapper for RLBench."""
@@ -30,7 +31,7 @@ class RLBenchCustEnv(gym.Env):
             raise ValueError(
                 'Unrecognised observation_mode: %s.' % observation_mode)
         
-        action_mode = ActionMode(ArmActionMode.ABS_EE_POSE_PLAN_WORLD_FRAME_WITH_COLLISION_CHECK)
+        action_mode = ActionMode(ArmActionMode.DELTA_EE_POSE_WORLD_FRAME)
         
         #action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
         #action_mode = ActionMode(ArmActionMode.DELTA_EE_POSE_PLAN_WORLD_FRAME)
@@ -115,7 +116,16 @@ class RLBenchCustEnv(gym.Env):
 
     def step(self, action) -> Tuple[Dict[str, np.ndarray], float, bool, dict]:
         clipped_action = np.array((*np.clip(action[0:3], self.action_low, self.action_high), 1,0,0,0,0))
-        obs, reward, terminate = self.task.step(clipped_action)
+
+        try:
+            obs, reward, terminate = self.task.step(clipped_action)
+        except ConfigurationPathError as e:
+            terminate = True
+            reward = -1
+            obs = self.task._scene.get_observation()
+            pass
+
+        
         return self._extract_obs(obs), reward, terminate, {}
 
     def close(self) -> None:

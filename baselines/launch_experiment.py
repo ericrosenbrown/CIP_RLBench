@@ -107,8 +107,6 @@ if __name__ == '__main__':
         motion_plan_to_above_button(env)
 
 
-        #indicate whether the arm tip has reached the target
-        success = False
         while not done:
             if params['policy_type'] == 'e_greedy':
                 a = Q_object.e_greedy_policy(s, episode + 1, 'train')
@@ -123,8 +121,11 @@ if __name__ == '__main__':
 
 
             if done:
-                print('reach target!', 'reward: ', r, 'done in', t, 'steps')
-                success = True
+                if r > 0:
+                    print('reach target!', 'reward: ', r, 'done in', t, 'steps')
+                elif r<0:
+                    print('can not find a proper path, reset!', 'reward: ', r, 'done in', t, 'steps')
+ 
 
 
             t = t + 1
@@ -151,16 +152,19 @@ if __name__ == '__main__':
         # tracking the agent's performance
         if (episode % 10 == 0) or (episode == params['max_episode'] - 1):
             temp = []
-            for _ in range(10):
+            for index in range(10):
                 s, G, done, t = env.reset(), 0, False, 0
                 motion_plan_to_above_button(env)
-
+                print(index)
+                breakpoint()
+                count = 0
                 while done == False:
                     a = Q_object.e_greedy_policy(s, episode + 1, 'test')
                     sp, r, done, _ = env.step(numpy.array(a))
 
                     # new s is [arm.get_joint_positions(), tip.get_pose(), target.get_position()]
-
+                    print("step:",count)
+                    count = count + 1
                     s, G, t = sp, G + r, t + 1
 
                     #if can't find within 200 steps, end it.
