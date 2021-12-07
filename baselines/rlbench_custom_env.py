@@ -11,6 +11,9 @@ from rlbench.observation_config import ObservationConfig
 import numpy as np
 from pyrep.objects.shape import Shape
 from pyrep.errors import ConfigurationPathError
+from pyrep.robots.end_effectors.panda_gripper import PandaGripper
+from pyrep.objects.shape import Shape
+from pyrep.robots.arms.panda import Panda
 
 class RLBenchCustEnv(gym.Env):
     """An gym wrapper for RLBench."""
@@ -31,7 +34,7 @@ class RLBenchCustEnv(gym.Env):
             raise ValueError(
                 'Unrecognised observation_mode: %s.' % observation_mode)
         
-        action_mode = ActionMode(ArmActionMode.DELTA_EE_POSE_WORLD_FRAME)
+        action_mode = ActionMode(ArmActionMode.DELTA_EE_POSE_PLAN_WORLD_FRAME)
         
         #action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
         #action_mode = ActionMode(ArmActionMode.DELTA_EE_POSE_PLAN_WORLD_FRAME)
@@ -115,8 +118,11 @@ class RLBenchCustEnv(gym.Env):
         return self._extract_obs(obs)
 
     def step(self, action) -> Tuple[Dict[str, np.ndarray], float, bool, dict]:
-        clipped_action = np.array((*np.clip(action[0:3], self.action_low, self.action_high), 1,0,0,0,0))
-
+        #clipped_action = np.array(( 0, 0.01, 0, 0,0,0,1,0))
+        clipped_action = np.array(( action[0]*0.01,action[1]*0.01, action[2]*0.01, 0,0,0,1,0))
+        print("action choosen:", clipped_action)
+        #clipped_action = np.array((*(action[0:3]*0.1)), 0,0,0,1,0)
+    
         try:
             obs, reward, terminate = self.task.step(clipped_action)
         except ConfigurationPathError as e:
@@ -126,6 +132,21 @@ class RLBenchCustEnv(gym.Env):
             pass
 
         
+        return self._extract_obs(obs), reward, terminate, {}
+
+    def goto_button(self):
+        target_topPlate = Shape('target_button_topPlate')
+        arm = Panda()
+        tip = arm.get_tip()
+        distance = target_topPlate.get_position()-tip.get_position()
+        action = np.array((distance[0], distance[1], distance[2]+0.05, 0,0,0,1,0))
+        try:
+            obs, reward, terminate = self.task.step(action)
+        except ConfigurationPathError as e:
+            terminate = True
+            reward = -1
+            obs = self.task._scene.get_observation()
+            pass
         return self._extract_obs(obs), reward, terminate, {}
 
     def close(self) -> None:

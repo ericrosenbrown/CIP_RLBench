@@ -100,12 +100,12 @@ if __name__ == '__main__':
         joint = Shape('target_button_wrap')
 
         trajectory = [] # store the transitions from each trajectory here. Is cleared after each trajectory.
-        #pdb.set_trace()
         s, done, t = env.reset(), False, 0
- 
-        #print("Initial State is: ", s)
-        motion_plan_to_above_button(env)
-
+        #motion_plan_to_above_button(env)
+        #motion plan to button is not going to work if we choose to use DELTA_EE_POSE_PLAN_WORLD_FRAME,
+        #currently the RLBench cannot switch action mode on the fly, therefore we can calculate the distance between
+        #the target position and the gripper tip, and just use that as an action at the beginning. 
+        s, r, done, info = env.goto_button()
 
         while not done:
             if params['policy_type'] == 'e_greedy':
@@ -115,9 +115,7 @@ if __name__ == '__main__':
             elif params['policy_type'] == 'gaussian':
                 a = Q_object.gaussian_policy(s, episode + 1, 'train')
 
-
             sp, r, done, _ = env.step(numpy.array(a))
-            #print("Training loop diff is: ", sp-s)
 
 
             if done:
@@ -126,8 +124,6 @@ if __name__ == '__main__':
                 elif r<0:
                     print('can not find a proper path, reset!', 'reward: ', r, 'done in', t, 'steps')
  
-
-
             t = t + 1
             done_p = False if t == max_episode_steps else done
 
@@ -154,9 +150,7 @@ if __name__ == '__main__':
             temp = []
             for index in range(10):
                 s, G, done, t = env.reset(), 0, False, 0
-                motion_plan_to_above_button(env)
-                print(index)
-                breakpoint()
+                s, r, done, info = env.goto_button()
                 count = 0
                 while done == False:
                     a = Q_object.e_greedy_policy(s, episode + 1, 'test')
