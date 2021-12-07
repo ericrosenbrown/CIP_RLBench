@@ -46,7 +46,7 @@ class RLBenchCustEnv(gym.Env):
 
         _, obs = self.task.reset()
         self.action_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(self.env.action_size,))
+            low=-1.0, high=1.0, shape=(self.env.action_size-5,)) # don't include the quaternion or gripper open-close state in the action space for now. 
         if observation_mode == 'state':
             self.observation_space = spaces.Box(
                 low=-np.inf, high=np.inf, shape=obs.get_low_dim_data().shape)

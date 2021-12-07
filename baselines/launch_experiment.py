@@ -41,12 +41,7 @@ if __name__ == '__main__':
     alg = 'rbf'
     params = utils_for_q_learning.get_hyper_parameters(hyper_parameter_name, alg)
     params['hyper_parameters_name'] = hyper_parameter_name
-
-
-
     env = RLBenchCustEnv(PushButton,observation_mode='touch_forces', render_mode='human')  #
-
-
     params['env'] = env
     params['seed_number'] = int(sys.argv[2])
     if len(sys.argv) > 3:
@@ -113,7 +108,6 @@ if __name__ == '__main__':
                 a = Q_object.gaussian_policy(s, episode + 1, 'train')
 
             sp, r, done, _ = env.step(numpy.array(a))
-
 
             if done:
                 if r > 0:
