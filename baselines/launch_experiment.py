@@ -44,10 +44,7 @@ if __name__ == '__main__':
 
 
 
-    #env = gym.make(params['env_name'])  # render_mode="human"
-    #wrap the environment with the custom wrapper to reduce obs space
-    #env = Push_button_wrapper(env)
-    env = RLBenchCustEnv(PushButton,observation_mode='touch_forces', render_mode='human')
+    env = RLBenchCustEnv(PushButton,observation_mode='touch_forces', render_mode='human')  #
 
 
     params['env'] = env
@@ -84,8 +81,8 @@ if __name__ == '__main__':
     all_times_per_updates = []
     max_episode_steps = 200
     max_episode_steps_eval = 200
-    # main training loop
 
+    # main training loop
     for episode in range(params['max_episode']):
         epsilon = 1.0 / numpy.power(episode+1, 1.0 / params['policy_parameter'])
         print("episode {}".format(episode), "epsilon {}".format(epsilon))
@@ -156,8 +153,6 @@ if __name__ == '__main__':
                     a = Q_object.e_greedy_policy(s, episode + 1, 'test')
                     sp, r, done, _ = env.step(numpy.array(a))
 
-                    # new s is [arm.get_joint_positions(), tip.get_pose(), target.get_position()]
-                    print("step:",count)
                     count = count + 1
                     s, G, t = sp, G + r, t + 1
 

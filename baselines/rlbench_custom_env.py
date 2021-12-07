@@ -7,6 +7,7 @@ from pyrep.objects.dummy import Dummy
 from pyrep.objects.vision_sensor import VisionSensor
 from rlbench.environment import Environment
 from rlbench.action_modes import ArmActionMode, ActionMode
+from rlbench.task_environment import InvalidActionError
 from rlbench.observation_config import ObservationConfig
 import numpy as np
 from pyrep.objects.shape import Shape
@@ -118,11 +119,7 @@ class RLBenchCustEnv(gym.Env):
         return self._extract_obs(obs)
 
     def step(self, action) -> Tuple[Dict[str, np.ndarray], float, bool, dict]:
-        #clipped_action = np.array(( 0, 0.01, 0, 0,0,0,1,0))
         clipped_action = np.array(( action[0]*0.01,action[1]*0.01, action[2]*0.01, 0,0,0,1,0))
-        print("action choosen:", clipped_action)
-        #clipped_action = np.array((*(action[0:3]*0.1)), 0,0,0,1,0)
-    
         try:
             obs, reward, terminate = self.task.step(clipped_action)
         except ConfigurationPathError as e:
@@ -130,7 +127,12 @@ class RLBenchCustEnv(gym.Env):
             reward = -1
             obs = self.task._scene.get_observation()
             pass
-
+        except InvalidActionError as e:
+            #print("Target is outside of workspace!!!!.")
+            terminate = True
+            reward = -1
+            obs = self.task._scene.get_observation()
+            pass    
         
         return self._extract_obs(obs), reward, terminate, {}
 
@@ -147,6 +149,7 @@ class RLBenchCustEnv(gym.Env):
             reward = -1
             obs = self.task._scene.get_observation()
             pass
+        
         return self._extract_obs(obs), reward, terminate, {}
 
     def close(self) -> None:
