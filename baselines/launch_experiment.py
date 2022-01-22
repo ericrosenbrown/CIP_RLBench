@@ -17,6 +17,7 @@ from pyrep.robots.arms.panda import Panda
 from pyrep.objects.joint import Joint
 from pyrep.errors import ConfigurationPathError
 from pyrep.objects.shape import Shape
+from pyrep.objects.vision_sensor import VisionSensor
 
 from rlbench.environment import Environment
 from rlbench.action_modes import ArmActionMode, ActionMode
@@ -26,9 +27,10 @@ from BaselineWrapper import BaselineTaskWrapper
 from HapticWrapper import HapticWrapper
 from RBFDQN import Net
 from utils import motion_plan_to_above_button
-from rlbench.tasks import PushButton
+from rlbench.tasks import PushButton, OpenDrawer
 from rlbench_custom_env import RLBenchCustEnv
 from push_button_wrapper import Push_button_wrapper
+
 
 if __name__ == '__main__':
     if torch.cuda.is_available():
@@ -41,7 +43,14 @@ if __name__ == '__main__':
     alg = 'rbf'
     params = utils_for_q_learning.get_hyper_parameters(hyper_parameter_name, alg)
     params['hyper_parameters_name'] = hyper_parameter_name
-    env = RLBenchCustEnv(PushButton,observation_mode='touch_forces', render_mode='human')  #
+    
+    task = None
+    if hyper_parameter_name == '100':
+        task = PushButton
+    elif hyper_parameter_name == '200':
+        task = OpenDrawer
+    
+    env = RLBenchCustEnv(task,observation_mode='touch_forces', render_mode='human')  #
     params['env'] = env
     params['seed_number'] = int(sys.argv[2])
     if len(sys.argv) > 3:
@@ -49,7 +58,7 @@ if __name__ == '__main__':
         print("Save prepend is ", params['save_prepend'])
     utils_for_q_learning.set_random_seed(params)
 
-    s0 = env.reset()
+    s0, _, _, _ = env.reset()
 
 
     utils_for_q_learning.action_checker(env)
@@ -82,23 +91,10 @@ if __name__ == '__main__':
         epsilon = 1.0 / numpy.power(episode+1, 1.0 / params['policy_parameter'])
         print("episode {}".format(episode), "epsilon {}".format(epsilon))
 
-        #try to get as much info as possible for the button and arm
-        gripper = PandaGripper()
-        arm = Panda()
-        tip = arm.get_tip()
-        target_button_wrap = Shape('target_button_wrap')
-        target_button = Shape('push_button_target')
-        target_topPlate = Shape('target_button_topPlate')
-        joint = Shape('target_button_wrap')
-
         trajectory = [] # store the transitions from each trajectory here. Is cleared after each trajectory.
-        s, done, t = env.reset(), False, 0
-        #motion_plan_to_above_button(env)
-        #motion plan to button is not going to work if we choose to use DELTA_EE_POSE_PLAN_WORLD_FRAME,
-        #currently the RLBench cannot switch action mode on the fly, therefore we can calculate the distance between
-        #the target position and the gripper tip, and just use that as an action at the beginning. 
-        s, r, done, info = env.goto_button()
-
+        t = 0 
+        s, r, done, info = env.reset()
+        print("done with reset, starting policy training")
         while not done:
             if params['policy_type'] == 'e_greedy':
                 a = Q_object.e_greedy_policy(s, episode + 1, 'train')
@@ -140,8 +136,9 @@ if __name__ == '__main__':
         if (episode % 10 == 0) or (episode == params['max_episode'] - 1):
             temp = []
             for index in range(10):
-                s, G, done, t = env.reset(), 0, False, 0
-                s, r, done, info = env.goto_button()
+                G, done, t = 0, False, 0
+                s, r, done, info = env.reset()
+
                 count = 0
                 while done == False:
                     a = Q_object.e_greedy_policy(s, episode + 1, 'test')
@@ -161,5 +158,5 @@ if __name__ == '__main__':
             G_li.append(numpy.mean(temp))
             utils_for_q_learning.save(G_li, loss_li, params, alg)
             if numpy.mean(temp) >=0.5 and episode % 50 == 0:
-                torch.save(Q_object.state_dict(), './logs/obj_net_button_push' + str(episode) + "_seed_" + str(params['seed_number']))
-                torch.save(Q_object_target.state_dict(), './logs/obj_target_net_button_push' +str(episode)+ "_seed_" + str(params['seed_number']))
+                torch.save(Q_object.state_dict(), './logs/obj_net_' + env.task.get_name() + "_" + str(episode) + "_seed_" + str(params['seed_number']))
+                torch.save(Q_object_target.state_dict(), './logs/obj_target_net_' + env.task.get_name() + "_" + str(episode)+ "_seed_" + str(params['seed_number']))
