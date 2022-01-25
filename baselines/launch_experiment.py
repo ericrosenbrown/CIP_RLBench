@@ -50,7 +50,7 @@ if __name__ == '__main__':
     elif hyper_parameter_name == '200':
         task = OpenDrawer
     
-    env = RLBenchCustEnv(task,observation_mode='touch_forces', render_mode='human')  #
+    env = RLBenchCustEnv(task,observation_mode='touch_forces')#, render_mode='human')  #
     params['env'] = env
     params['seed_number'] = int(sys.argv[2])
     if len(sys.argv) > 3:
@@ -94,7 +94,6 @@ if __name__ == '__main__':
         trajectory = [] # store the transitions from each trajectory here. Is cleared after each trajectory.
         t = 0 
         s, r, done, info = env.reset()
-        print("done with reset, starting policy training")
         while not done:
             if params['policy_type'] == 'e_greedy':
                 a = Q_object.e_greedy_policy(s, episode + 1, 'train')
@@ -157,6 +156,6 @@ if __name__ == '__main__':
 
             G_li.append(numpy.mean(temp))
             utils_for_q_learning.save(G_li, loss_li, params, alg)
-            if numpy.mean(temp) >=0.5 and episode % 50 == 0:
+            if (episode == params['max_episode'] - 1) or (episode == 0) or (episode % 100 == 0):
                 torch.save(Q_object.state_dict(), './logs/obj_net_' + env.task.get_name() + "_" + str(episode) + "_seed_" + str(params['seed_number']))
                 torch.save(Q_object_target.state_dict(), './logs/obj_target_net_' + env.task.get_name() + "_" + str(episode)+ "_seed_" + str(params['seed_number']))
