@@ -1,26 +1,32 @@
 import rospy 
-from iwaa_stack.msg import CartesianImpedanceControlMode.msg, ConfigureSmartServo
+from iiwa_msgs.msg import CartesianImpedanceControlMode
+from iiwa_msgs.srv import ConfigureControlMode
 
-def cartesianimpedancecontrol(req):
-    rospy.wait_for_service("/iiwa/configuration/configureSmartServo")
+if __name__ == '__main__':
+    
+    rospy.wait_for_service("/iiwa_left/configuration/ConfigureControlMode")
     try:
-        service = rospy.ServiceProxy("/iiwa/configuration/configureSmartServo", ConfigureSmartServo)
-        # figure out what to add here
-        config = ConfigureSmartServo()
-        config.control_mode = 2
-        config.cartesian_stiffness = [1, 1, 1, 1, 1, 1]
-        config.nullspace_stiffness = 1
-        nullspace_damping = .7
-        service(config)
-        return service
+        imp = CartesianImpedanceControlMode()
+        imp.cartesian_stiffness.x = 150.0
+        imp.cartesian_stiffness.y = 150.0
+        imp.cartesian_stiffness.z = 150.0
+        imp.cartesian_stiffness.a = 150.0
+        imp.cartesian_stiffness.b = 150.0
+        imp.cartesian_stiffness.c = 150.0
+
+        imp.cartesian_damping.x = 0.5
+        imp.cartesian_damping.y = 0.5
+        imp.cartesian_damping.z = 0.5
+        imp.cartesian_damping.a = 0.5
+        imp.cartesian_damping.b = 0.5
+        imp.cartesian_damping.c = 0.5
+        
+        imp.nullspace_stiffness = 100.0
+        imp.nullspace_damping = 0.7
+
+        service = rospy.ServiceProxy("/iiwa_left/configuration/ConfigureControlMode", ConfigureControlMode)
+        result = service(control_mode=2, 
+                         cartesian_impedance=imp)
+
     except rospy.ServiceException as e:
         print("Service call failed: %e"%e)
-
-if __name__ == "__main__":
-    if len(sys.argv) == 4:
-        control_mode = 2 #CartesianImpedance
-        cartesian_stiffness = [1, 1, 1, 1, 1, 1]
-        nullspace_stiffness = 1
-        nullspace_damping = .7
-    else:
-        print("Config failed")
