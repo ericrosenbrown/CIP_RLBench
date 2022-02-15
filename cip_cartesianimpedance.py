@@ -24,6 +24,16 @@ class ArmCommand(object):
         self.qz = msg.poseStamped.pose.orientation.z
         self.qw = msg.poseStamped.pose.orientation.w
 
+    def test_command(self):
+        self.x += 0.1
+        self.y += 0.1
+        self.z += 0.1
+
+        self.qx += 0.1
+        self.qy += 0.1
+        self.qz += 0.1
+        self.qw += 0.1
+
 if __name__ == '__main__':
 
     armcommand = ArmCommand()
@@ -57,4 +67,8 @@ if __name__ == '__main__':
     except rospy.ServiceException as e:
         print("Service call failed: %e"%e)
 
-    rospy.spin()
+    pub = rospy.Publisher("test_command", CartesianPose)
+    while not rospy.is_shutdown():
+        message = armcommand.test_command
+        rospy.loginfo(message)
+        pub.publish(message)
