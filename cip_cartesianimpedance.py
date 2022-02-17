@@ -13,6 +13,16 @@ class ArmCommand(object):
         self.qy = None
         self.qz = None
         self.qw = None 
+
+        self.target_x = None
+        self.target_y = None
+        self.target_z = None
+        self.target_qx = None
+        self.target_qy = None
+        self.target_qz = None
+        self.target_qw = None
+
+        self.pub = rospy.Publisher("/iiwa_left/command/CartesianPose", PoseStamped)
         
     def callback(self, msg):
         self.x = msg.poseStamped.pose.position.x
@@ -24,21 +34,44 @@ class ArmCommand(object):
         self.qz = msg.poseStamped.pose.orientation.z
         self.qw = msg.poseStamped.pose.orientation.w
 
-    def test_command(self):
-        self.x += 0.1
-        self.y += 0.1
-        self.z += 0.1
+        if self.target_x is None:
+            self.target_x = self.x 
+            self.target_y = self.y 
+            self.target_z = self.z + 0.05
+            self.target_qx = self.qx
+            self.target_qy = self.qy
+            self.target_qz = self.qz
+            self.target_qw = self.qw
 
-        self.qx += 0.1
-        self.qy += 0.1
-        self.qz += 0.1
-        self.qw += 0.1
+        rospy.loginfo('--')
+        rospy.loginfo('Got pose %f, %f, %f'  % (self.x, self.y, self.z))
+        rospy.loginfo('Target pose %f, %f, %f'  % (self.target_x, self.target_y, self.target_z))
+
+    def test_command(self):
+
+        if self.target_x is None:
+            return 
+
+        message = PoseStamped()
+
+        message.pose.position.x = self.target_x
+        message.pose.position.y = self.target_y
+        message.pose.position.z = self.target_z
+
+        message.pose.orientation.x = self.target_qx
+        message.pose.orientation.y = self.target_qy
+        message.pose.orientation.z = self.target_qz
+        message.pose.orientation.w = self.target_qw
+        self.pub.publish(message)
+
+        
+        return 
 
 if __name__ == '__main__':
 
     armcommand = ArmCommand()
     rospy.init_node('cart_subscriber', anonymous=True)
-    rospy.Subscriber("/iiwa_right/state/CartesianPose", CartesianPose, armcommand.callback)
+    rospy.Subscriber("/iiwa_left/state/CartesianPose", CartesianPose, armcommand.callback)
 
     rospy.wait_for_service("/iiwa_left/configuration/ConfigureControlMode")
     try:
@@ -67,8 +100,8 @@ if __name__ == '__main__':
     except rospy.ServiceException as e:
         print("Service call failed: %e"%e)
 
-    pub = rospy.Publisher("test_command", CartesianPose)
+    rate = rospy.Rate(10) # 10hz
     while not rospy.is_shutdown():
-        message = armcommand.test_command
-        rospy.loginfo(message)
-        pub.publish(message)
+        rospy.loginfo("Running test command")
+        armcommand.test_command()
+        rate.sleep()
