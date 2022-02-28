@@ -1,14 +1,21 @@
 import rospy 
-from iiwa_msgs.msg import CartesianImpedanceControlMode, CartesianPose
+from iiwa_msgs.msg import CartesianImpedanceControlMode, CartesianPose, JointVelocity
 from iiwa_msgs.srv import ConfigureControlMode
 from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import JointState
+
+import numpy as np
+
+CONTROL_FREQ = 10
 
 class ArmCommand(object):
     """docstring for ArmCommand"""
     def __init__(self):
         
+        # reference frame of pose commands 
         self.frame = None
 
+        # cartesian pose
         self.x = None
         self.y = None 
         self.z = None
@@ -17,6 +24,7 @@ class ArmCommand(object):
         self.qz = None
         self.qw = None 
 
+        # target cartesian pose 
         self.target_x = None
         self.target_y = None
         self.target_z = None
@@ -25,9 +33,15 @@ class ArmCommand(object):
         self.target_qz = None
         self.target_qw = None
 
+        # joint data 
+        self.cur_q = np.zeros(7)
+        self.cur_qdot = np.zeros(7)
+        self.cur_effort = np.zeros(7)
+
+        # cartesian pose pub 
         self.pub = rospy.Publisher("/iiwa_left/command/CartesianPose", PoseStamped)
         
-    def callback(self, msg):
+    def cart_callback(self, msg):
         self.x = msg.poseStamped.pose.position.x
         self.y = msg.poseStamped.pose.position.y
         self.z = msg.poseStamped.pose.position.z
@@ -47,9 +61,21 @@ class ArmCommand(object):
             self.target_qz = self.qz
             self.target_qw = self.qw
 
+    def joint_callback(self, msg):
+        self.cur_q = np.array(msg.position)
+        self.cur_effort = np.array(msg.effort)
+
+    def joint_vel_callback(self, msg):
+        self.cur_qdot[0] = msg.velocity.a1
+        self.cur_qdot[1] = msg.velocity.a2
+        self.cur_qdot[2] = msg.velocity.a3
+        self.cur_qdot[3] = msg.velocity.a4
+        self.cur_qdot[4] = msg.velocity.a5
+        self.cur_qdot[5] = msg.velocity.a6
+        self.cur_qdot[6] = msg.velocity.a7
         
     def test_command(self):
-
+ 
         if self.target_x is None:
             return 
 
@@ -75,8 +101,12 @@ class ArmCommand(object):
 if __name__ == '__main__':
     armcommand = ArmCommand()
     rospy.init_node('arm_commander', anonymous=True)
-    rospy.Subscriber("/iiwa_left/state/CartesianPose", CartesianPose, armcommand.callback)
-    rate = rospy.Rate(10) # 10hz
+    
+    rospy.Subscriber("/iiwa_left/state/CartesianPose", CartesianPose, armcommand.cart_callback)
+    rospy.Subscriber("/iiwa_left/joint_states", JointState, armcommand.joint_callback)
+    rospy.Subscriber("/iiwa_left/state/JointVelocity", JointVelocity, armcommand.joint_vel_callback)
+
+    rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():
         armcommand.test_command()
         rate.sleep()
