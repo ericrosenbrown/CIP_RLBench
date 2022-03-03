@@ -1,12 +1,14 @@
 import rospy 
-from iiwa_msgs.msg import CartesianImpedanceControlMode, CartesianPose, JointVelocity
+from iiwa_msgs.msg import CartesianImpedanceControlMode, CartesianPose, JointVelocity, JointPosition
 from iiwa_msgs.srv import ConfigureControlMode
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 
+import copy
 import numpy as np
 
 CONTROL_FREQ = 10
+SAFETY_FACTOR = 0.8
 
 class ArmCommand(object):
     """docstring for ArmCommand"""
@@ -34,24 +36,27 @@ class ArmCommand(object):
         self.target_qw = None
 
         # joint data 
-        self.cur_q = np.zeros(7)
-        self.cur_qdot = np.zeros(7)
-        self.cur_effort = np.zeros(7)
+        self.qpos = np.zeros(7)
+        self.qvel = np.zeros(7)
+        self.effort = np.zeros(7)
 
         # cartesian pose pub 
-        self.pub = rospy.Publisher("/iiwa_left/command/CartesianPose", PoseStamped)
+        self.pub_cart = rospy.Publisher("/iiwa_left/command/CartesianPose", PoseStamped, queue_size=1)
+        self.pub_q = rospy.Publisher("/iiwa_left/command/JointPosition", JointPosition, queue_size=1)
 
         # define limits 
-        self.qpos_lower = np.array([-170, -120, -170, -120, -170, -120, -175])*np.pi / 180.0
+        self.safe = True
+        self.qpos_lower = SAFETY_FACTOR * np.array([-170, -120, -170, -120, -170, -120, -175])*np.pi / 180.0
         self.qpos_upper = -self.qpos_lower
         
-        self.torque_lower = np.array([-176, -176, -110, -110, -110, -40, -40])
-        self.torque_upper = -self.torque_lower
+        self.effort_lower = SAFETY_FACTOR * np.array([-176, -176, -110, -110, -110, -40, -40])
+        self.effort_upper = -self.effort_lower
 
-        self.qvel_lower = np.array([-98, -98, -100, -130, -140, -180, -180])*np.pi / 180.0
+        self.qvel_lower = SAFETY_FACTOR * np.array([-98, -98, -100, -130, -140, -180, -180])*np.pi / 180.0
         self.qvel_upper = -self.qvel_lower
         
     def cart_callback(self, msg):
+        self.frame = msg.poseStamped.header.frame_id
         self.x = msg.poseStamped.pose.position.x
         self.y = msg.poseStamped.pose.position.y
         self.z = msg.poseStamped.pose.position.z
@@ -61,32 +66,53 @@ class ArmCommand(object):
         self.qz = msg.poseStamped.pose.orientation.z
         self.qw = msg.poseStamped.pose.orientation.w
 
-        if self.target_x is None:
-            self.frame = msg.poseStamped.header.frame_id
-            self.target_x = self.x 
-            self.target_y = self.y 
-            self.target_z = self.z
-            self.target_qx = self.qx
-            self.target_qy = self.qy
-            self.target_qz = self.qz
-            self.target_qw = self.qw
+    def set_target(self, xyz, quat):      
+        self.target_x = xyz[0]
+        self.target_y = xyz[1]
+        self.target_z = xyz[2]
+        self.target_qx = quat[0]
+        self.target_qy = quat[1]
+        self.target_qz = quat[2]
+        self.target_qw = quat[3]
 
     def joint_callback(self, msg):
-        self.cur_q = np.array(msg.position)
-        self.cur_effort = np.array(msg.effort)
+        self.qpos = np.array(msg.position)
+        self.effort = np.array(msg.effort)
 
     def joint_vel_callback(self, msg):
-        self.cur_qdot[0] = msg.velocity.a1
-        self.cur_qdot[1] = msg.velocity.a2
-        self.cur_qdot[2] = msg.velocity.a3
-        self.cur_qdot[3] = msg.velocity.a4
-        self.cur_qdot[4] = msg.velocity.a5
-        self.cur_qdot[5] = msg.velocity.a6
-        self.cur_qdot[6] = msg.velocity.a7
+        self.qvel[0] = msg.velocity.a1
+        self.qvel[1] = msg.velocity.a2
+        self.qvel[2] = msg.velocity.a3
+        self.qvel[3] = msg.velocity.a4
+        self.qvel[4] = msg.velocity.a5
+        self.qvel[5] = msg.velocity.a6
+        self.qvel[6] = msg.velocity.a7
+
+    def check_safety(self):
+        """ returns True when arm is safe"""
+
+        if np.any( self.qpos < self.qpos_lower ) or np.any( self.qpos > self.qpos_upper ):
+            self.safe = False
+            return False 
+
+        if np.any( self.effort < self.effort_lower ) or np.any( self.effort > self.effort_upper ):
+            self.safe = False
+            return False 
+
+        if np.any( self.qvel < self.qvel_lower ) or np.any( self.qvel > self.qvel_upper ):
+            self.safe = False
+            return False 
+
+        # TODO: workspace
+        return True 
+
         
-    def test_command(self):
+    def publish_target_command(self):
  
         if self.target_x is None:
+            return 
+
+        if self.unsafe:
             return 
 
         message = PoseStamped()
@@ -100,23 +126,54 @@ class ArmCommand(object):
         message.pose.orientation.y = self.target_qy
         message.pose.orientation.z = self.target_qz
         message.pose.orientation.w = self.target_qw
-        self.pub.publish(message)
-
-        rospy.loginfo('-'*20)
-        rospy.loginfo('Got pose %f, %f, %f'  % (self.x, self.y, self.z))
-        rospy.loginfo('Target pose %f, %f, %f'  % (self.target_x, self.target_y, self.target_z))
-        rospy.loginfo('-'*20)
+        self.pub_cart.publish(message)
         return 
+
+    def publish_current_command(self): 
+        message = PoseStamped()
+        message.header.frame_id = self.frame
+
+        message.pose.position.x = self.x
+        message.pose.position.y = self.y
+        message.pose.position.z = self.z
+
+        message.pose.orientation.x = self.qx
+        message.pose.orientation.y = self.qy
+        message.pose.orientation.z = self.qz
+        message.pose.orientation.w = self.qw
+        self.pub_cart.publish(message)
+        return 
+
+    def publish_q(self, q):
+        message = JointPosition()
+        message.position.a1 = q[0]
+        message.position.a2 = q[1]
+        message.position.a3 = q[2]
+        message.position.a4 = q[3]
+        message.position.a5 = q[4]
+        message.position.a6 = q[5]
+        message.position.a7 = q[6]
+        self.pub_q.publish(message)
 
 if __name__ == '__main__':
     armcommand = ArmCommand()
-    rospy.init_node('arm_commander', anonymous=True)
-    
+    rospy.init_node('arm_commander', anonymous=True)    
     rospy.Subscriber("/iiwa_left/state/CartesianPose", CartesianPose, armcommand.cart_callback)
     rospy.Subscriber("/iiwa_left/joint_states", JointState, armcommand.joint_callback)
     rospy.Subscriber("/iiwa_left/state/JointVelocity", JointVelocity, armcommand.joint_vel_callback)
 
+    last_safe_state = None
+    target_q = np.array([0, 0, 0, 10, 160, 0, 45]) * np.pi / 180. 
+
     rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():
-        armcommand.test_command()
+
+        if armcommand.check_safety():
+            armcommand.publish_q(target_q)
+        else:
+            if last_safe_state is None:
+                last_safe_state = copy.deepcopy(armcommand.qpos)
+                
+            armcommand.publish_q(last_safe_state)
+            rospy.loginfo(armcommand.qpos)
         rate.sleep()
