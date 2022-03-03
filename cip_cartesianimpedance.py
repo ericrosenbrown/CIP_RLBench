@@ -40,6 +40,16 @@ class ArmCommand(object):
 
         # cartesian pose pub 
         self.pub = rospy.Publisher("/iiwa_left/command/CartesianPose", PoseStamped)
+
+        # define limits 
+        self.qpos_lower = np.array([-170, -120, -170, -120, -170, -120, -175])*np.pi / 180.0
+        self.qpos_upper = -self.qpos_lower
+        
+        self.torque_lower = np.array([-176, -176, -110, -110, -110, -40, -40])
+        self.torque_upper = -self.torque_lower
+
+        self.qvel_lower = np.array([-98, -98, -100, -130, -140, -180, -180])*np.pi / 180.0
+        self.qvel_upper = -self.qvel_lower
         
     def cart_callback(self, msg):
         self.x = msg.poseStamped.pose.position.x
@@ -55,7 +65,7 @@ class ArmCommand(object):
             self.frame = msg.poseStamped.header.frame_id
             self.target_x = self.x 
             self.target_y = self.y 
-            self.target_z = self.z + 0.05
+            self.target_z = self.z
             self.target_qx = self.qx
             self.target_qy = self.qy
             self.target_qz = self.qz
