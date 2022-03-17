@@ -103,7 +103,7 @@ class ArmCommand(object):
             self.safe = False
             return False 
 
-        # TODO: workspace
+        self.last_safe_state = copy.deepcopy(self.qpos)
         return True 
 
         
@@ -173,7 +173,7 @@ if __name__ == '__main__':
         else:
             if last_safe_state is None:
                 last_safe_state = copy.deepcopy(armcommand.qpos)
-                
+
             armcommand.publish_q(last_safe_state)
             rospy.loginfo(armcommand.qpos)
         rate.sleep()
